@@ -1,0 +1,612 @@
+---
+title: "Survival Analysis: Tutorial in R"
+author: "Aura Frizzati"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+   toc: true
+   toc_float: 
+    collapsed: false
+   toc_depth: 3
+   number_sections: true
+   theme: yeti
+---
+
+```{r setup, include=FALSE}
+
+## rmarkdown chunks' setup
+knitr::opts_chunk$set(echo = TRUE, ## do not show the code chunks in the report
+                      message = FALSE, ## do not show the R messages in the report
+                      warning = FALSE ## do not show the R warnings in the report
+                      ,include = TRUE
+                      )
+```
+
+```{r}
+library(dplyr)
+library(survival)
+library(ggsurvfit)
+```
+
+
+Tutorial from online YouTube video collection: https://www.youtube.com/watch?v=vX3l36ptrTU&list=PLqzoL9-eJTNDdnKvep_YHIwk2AMqHhuJ0&index=1
+
+# What is censoring?
+
+Survival analysis models **time-to-event** as an **outcome** (e.g. time to death, how long does one wait on a waiting list for surgery, etc).
+
+The outcome $y$ has two parts:  
+- **Time** = T (time to event or follow-up)    
+- **Has the event (E) occurred?** Yes/No   
+
+$$y = Surv(T,E)$$
+
+
+- Censoring: has the event occurred or not occurred (= the event was censored) within the follow-up period. The concept of censoring makes survival analysis unique. Individuals might also be **lost at followed-up**.
+
+- **Censored observations** get **included** into a survival model
+
+- Right-censoring vs left-censoring (we don't know what happened to the subject before the study)
+
+- All survival models assume that **censoring is non-informative**: being censored or not is not related to the probability of the event occurring. (e.g., measuring time-to-death, patients lost at follow-up are those that have started to feel much better)
+
+# Survival function, hazard & hazard ratio
+
+- **Survival function**: probability of surviving beyond time $t$
+$$S(t) = P(T > t)$$
+
+- **Hazard**: probability of getting the event in the next few seconds $t + \delta$ given the event is not present now $t$.
+$$H(t) =  P(T < t + \delta | T > t)$$
+
+
+- **Hazard ratio** (**HR**): this is the hazard for the exposure group relative to the hazard for the non-exposure group
+
+$$\frac{H_{x = 1}}{H_{x = 0}}$$
+
+If HR = 2, for example, at any given time, someone who is exposed has twice the risk of dying than someone who is not exposed.
+
+# Survival models   
+
+- **Kaplan-Meier (K-M) survival model**: **non-parametric**  
+  - Pro: 
+    - **Simple to interpret**   
+    - You can **estimate the survival** beyond a specific time  
+    - The hazard rate can increase or decrease and not necessarily proportionally with time   
+  - Con:   
+    - **No functional mathematical form** to describe the K-M curve (every single step of the curve needs to be described)     
+    - You **cannot estimate a HR** (because there isn't a constant rate of decrease)     
+    - It can only include **few** and **categorical** independent variables ($Xs$)       
+
+<br>
+  
+- **Exponential survival model**: **parametric** (the survival function is modelled as a negative exponential curve). The **hazard** represents the **rate of decrease of the curve**       
+  - Pro:    
+    - We can **estimate** $S(t)$ and **HR**    
+    - It has a **mathematical function** to describe survival: $S(t) = e^{-Haz \times t}$ (the function has one parameter, the hazard)      
+  - Con:      
+    - **Not always realistic** because it **assumes** a **constant hazard** (i.e. rate of decrease of survival curve is constant. E.g. compare the human risk of dying while ageing)     
+    - As an alternative, the **Weibull model** allows the **hazard** to **increase/decrease proportionally with time**. However,this is still not often realistic (e.g. death risk after surgery: high risk immediately after surgery and then gradually decreasing)        
+    
+
+<br>
+  
+  
+- **Cox Proportional-Hazard (P-H) model**: **semi-parametric** (it is a sort of combination of the other two models)      
+  - Pro:    
+    - The **hazard** can **fluctuate with time** (like K-M survival model)     
+    - You can **estimate** the **HR**     
+  - Con:    
+    - You **cannot estimate the survival function**      
+
+
+# Kaplan-Meier model (also called Product-limit method)
+
+Load the dataset
+
+- `censor = 1` --> death
+- `censor = 0` --> censored
+
+
+```{r}
+#install.packages("Bolstad2")
+library(Bolstad2)
+data(AidsSurvival.df)
+head(AidsSurvival.df)
+```
+Load the `survival` library (already installed in Base R)
+
+```{r}
+library(survival)
+```
+
+Fit the KM (survival) model to the data
+
+```{r}
+km.model <- survfit(
+  Surv(time,censor) ~ 1, # ~ 1 is used when we do not have any predictor for survival
+  type = "kaplan-meier", ## default type
+  data = AidsSurvival.df)
+
+km.model
+```
+
+The median survival time is 7 months
+
+```{r}
+summary(km.model)
+```
+
+Model plot (the red line indicates the median survival time on the curve)
+
+```{r}
+plot(km.model, 
+     xlab ="Time (months)", 
+     ylab = "% Alive = S(t)", 
+     main = "KM-Model", 
+     las = 1, ## rotate y-axis labels
+     mark.time = TRUE ## this allows to visualise at what time were the observations censored
+     )
+abline(h = 0.5, col= "red")
+```
+
+Adding a predictor (`drug` = 1 or 0)
+
+```{r}
+km.model2 <- survfit(
+  Surv(time,censor) ~ drug, # ~ 1 is used when we do not have any predictor for survival
+  type = "kaplan-meier", ## default type
+  data = AidsSurvival.df)
+
+km.model2
+```
+
+
+
+```{r}
+summary(km.model2)
+```
+
+
+
+
+```{r}
+plot(km.model2, 
+     xlab ="Time (months)", 
+     ylab = "% Alive = S(t)", 
+     main = "KM-Model", 
+     las = 1, ## rotate y-axis labels
+     lwd = 2,
+     col = c("black", "blue"),
+     mark.time = TRUE ## this allows to visualise at what time were the observations censored
+     )
+abline(h = 0.5, col= "red")
+legend(18,0.95, legend=c("DrugNO", "DrugYES"), lty = 1, lwd = 2, bty = "", cex = 0.6, col = c("black", "blue"))
+```
+
+
+**Is there a statistically significant difference between the two groups?**      
+
+Let's use the **Log-rank test** (H0: the survival function for the 2 groups is the same). It can also be used for more than 2 groups
+
+
+```{r}
+survdiff(
+  Surv(time,censor) ~ drug,
+  data = AidsSurvival.df
+  )
+```
+
+There is a statistically sig difference between the survival functions of the 2 groups.
+
+
+# Exponential models (regression models for survival)
+
+These are parametric models.
+
+- **Poisson process**: events that occur **independently over time** (used to estimate how many time has an event occurred in a fixed period of time)
+  - **Rate** = $\lambda = \frac{y}{t}$    (i.e. the rate is the number of occurences over time)
+  - The Poisson process gives rise to two different theoretical probability distributions of random variables
+    - **Poisson distribution**: let $y$ be the number of occurrences of event in time $t$ (in this case, number of occurrences is the random variable and **time is fixed**):   
+    $y \sim poisson(\lambda)$    
+    $f(Y) = P(Y=k) = \frac{e^{-\lambda}(\lambda^k)}{k!}$, with $k$ number of occurrences, $e$ the Euler's number and $!$ the factorial function (this distribution has mean = $\lambda$ and variance = $\lambda$)
+    - **Exponential distribution**: let $t$ be the time until the next event occurs ($y = 1$) (in this case, **time is the random variable**):
+      $f(t) \approx P(T = t) = \lambda e^{-\lambda t}$  
+      $F(t) = P(T \leq t) = 1 - e^{-\lambda t}$ (mean = $\frac{1}{\lambda}$)  (the way the probability distribution is presented is the formula is **probability of not surviving after time $t$**)
+
+
+
+The idea of exponential distribution can then be extended to the **exponential survival model** and further to the Weibull model or the Cox proportional hazard model.  
+
+
+Survival function = $S(t) = P(T>t) = 1 - P(T \leq t)$ (here the probability is given as **surviving after time $t$**), therefore:   
+
+$S(t) = P(T>t) = 1 - P(T \leq t) =$  
+$= 1 - F(t) = 1 - (1 - e^{-\lambda t}) = e^{-\lambda t}$  
+
+$$S(t) = P(T>t) = e^{-\lambda t}$$  
+
+- Therefore, the survival function is equivalent to flipping the exponential distribution (around median = $y = 0.5$, obtaining a **negative exponential** function).
+- The rate of curve decrease, $\lambda$, is the **hazard** in the survival model:  
+
+
+$$S(t) = P(T>t) = e^{-\lambda t} = e^{-HAZ \times t}$$
+
+- To estimate the survival function we can use a **regression model** to estimate the **hazard**, using either:
+  - another **exponential function**: $HAZ = e^{b_0 + b_1X_1 + ... + b_kX_k}$   
+  - or a **linear function**: $ln(HAZ) = b_0 + b_1X_1 + ... + b_kX_k$ (for the linear model, the hazard rate for each predictor is obtained as $e^{b_n}$)    
+  
+- Alternative models to the survival exponential model (i.e. Weibull model and Cox proportional hazard model) differ in the intercept value $b_0$   
+- The hazard rate first gets estimated using the predictors and then it is plugged into the survival function to estimate survival
+   
+
+# Exponential vs Weibull vs Cox Proportional Hazards (How they differ)
+
+Relevant equations so far:  
+
+- To **estimate** the **hazard rate**:   
+
+    - **exponential function**: $HAZ = e^{b_0 + b_1X_1 + ... + b_kX_k}$    
+
+    - or, **linear function**: $ln(HAZ) = b_0 + b_1X_1 + ... + b_kX_k$   
+
+
+<br>
+
+- To **estimate** the **survival function**:
+
+$$S(t) = P(T>t) = e^{-\lambda t} = e^{-HAZ \times t}$$  
+
+<br>
+
+
+The **intercept** of the model ($b_0$) is what differentiates the three models and it corresponds to the **reference log-hazard** (for $t = 0$) 
+
+## Exponential survival model
+
+- $b_0$ is a **constant** and doesn't change
+- Therefore, the **hazard** is **constant in time** (no $t$ explicitly appears in the formulas to estimate the hazard rate)
+
+## Weibull survival model
+- $b_0$ **increases** proportionally with **time** (and the hazard increases with time as well); or $b_0$  **decreases** proportionally with **time** (and the hazard decreases with time as well)
+
+$$b_0 = ln(\alpha)ln(t) + b_0$$
+
+- if $\alpha = 1$ --> the model becomes the same as the **exponential** (no effect of time)   
+- if $\alpha > 1$ --> the **hazard increases** with **time**   
+- if $\alpha < 1$ --> the **hazard decreases** with **time**
+
+## Cox proportional hazard model
+- $b_0$ is a **function of time** (therefore it can fluctuate with time)
+
+$$b_0 = ln(h_0(t))$$    
+
+
+
+- $h_0(t)$ is the **hazard function**; it is the hazard for the baseline group that is allowed to fluctuate over time.    
+
+- You can estimate all the model's predictors' coefficients ($b_1, b_2, ...,b_k$) **without** having to estimate $h_0(t)$. However, this means we do not get any estimate of the intercept, therefore we **cannot estimate neither the hazard rate nor the survival function**. Therefore we **cannot use this model for predictive purposes** (e.g. estimate the probability of surviving beyond a specific time point)  
+- If our goal is to **estimate** only the **hazard ratio** (**HR**) between groups (**effect size model**), we can use Cox proportional hazard model   
+
+To summarise:      
+- **Kaplan-Meier model** can be used for **prediction of survival probability** but not for estimating hazard ratios   
+- **Cox proportional hazard model** can be used for **estimating hazard ratios** but not for prediction of survival probability  
+- **Exponential model** and **Weibull model** can be used for both **estimating hazard ratios** and for **prediction of survival probability** (although their assummptions are now always realistic)    
+
+
+# Cox Proportional Hazard (CPH) Model
+
+- CPH model **allows the hazard to change over time**  
+- It assumes that **hazard between groups** are **proportional**, i.e. the **HR is constant** over time  
+- If the proportional hazard **assumption is not met**, we could **include the interaction between the independent variable x time** in the model
+
+$$ln(HAZ) = b_0 + b_1X_1 + ... + b_kX_k = ln(h_0(t)) + b_1X_1 + ... + b_kX_k$$
+
+- The intercept ($ln(h_0(t))$) is a function of time 
+
+As alternative:
+
+$$HAZ = h_0(t) + e^{b_1X_1 + ... + b_kX_k}$$
+- The model's coefficients ($b_1,b_2,...,b_k$) can be estimated **without having to specify the value of the baseline hazard function** ($h_0(t)$) (similar to estimating the slope of a regression line without estimating the intercept. However the assumption is that the two lines of two groups are going to remain at the same distance with time)
+
+
+# Model Assumptions for CPH Model
+
+1. **Censoring** is **non-informative**: there is no association between an observation being censored and the likelihood of the event to occur (assumption also for the Kaplan-Meier, exponential and Weibull models)     
+2. The **survival times** ($t$) of different individuals are **independent** (assumption also for the Kaplan-Meier, exponential and Weibull models)     
+3. The **hazards** are **proportional** (i.e. the **HR** is **constant**) **over time**  (assumption also for the exponential and Weibull models). In other words:   
+  - The **relative difference between groups** is **constant over time**    
+  - **Survival curves do not cross**   
+  This assumption can be checked using:  
+  - **C-log-log plot**    
+  - **Schoenfeld's test**   
+4. The $ln(HAZ)$ is a **linear function** of the **numeric explanatory variables** ($Xs$)  (assumption also for the exponential and Weibull models). This is not important for categorical explanatory variables. This can be checked using:    
+  - **Residual plots** (the should be distributed along a line close to zero)      
+5. Values of **explanatory variables** ($Xs$) **do not change over time**    
+6. The **baseline hazard** ($h_0(t)$) is **unspecified**    
+
+ 
+- If assumption (3) is violated (i.e. HR is not constant over time), we can:   
+  - **Stratify** by the relevant variable and fit a separate model in each strata   
+  - Introduce **time-dependent coefficients/parameters** (the $\beta s$), i.e. fitting an **interaction term** that allows the effect of $X$ to change over time ($X \times t$).   
+  
+- If assumption (4) is violated (i.e. the relationship between $ln(HAZ)$ and the explanatory variable is not linear), the solution could be:  
+  - $X$ **transformation** (e.g. $ln(X)$, $\sqrt(X)$, ...)
+  - Include **polynomials** (e.g. $X^2$, $X^3$, ...)   
+  - Transform the numeric $X$ into a **categorical variable**   
+  
+- If assumption (5) is violated (e.g. $X$ is the drug's dose and it is changing over time), we can use a **time-dependent covariates' model**  
+
+- We cannot do anything for violation of assumption (1). Although we can check for it by taking the censored vs non-censored observations and try to compare them to see if they differ in any way (study design)   
+
+- Assumption (2) depends on the study design
+
+
+# CPH Model in R
+
+```{r}
+# Use the Stanford heart transplant data
+data(stanford2, package="survival")
+stanford2<- 
+  stanford2 %>% 
+  mutate(
+    Over40 = if_else(age > 40, "YES", "NO"),
+    Over40 = as.factor(Over40),
+    MisMatchLevel = case_when(
+      t5 < 0.7 ~ 0,
+      t5 >= 0.7 & t5 < 1.5 ~ 1,
+      TRUE ~ 2
+    ),
+    MisMatchLevel = as.factor(MisMatchLevel)
+    )
+
+head(stanford2)
+summary(stanford2)
+```
+First glance the data using K-M model and survival curves
+
+```{r}
+km.model <- survfit(
+  Surv(time, status) ~ MisMatchLevel, # ~ 1 is used when we do not have any predictor for survival
+  type = "kaplan-meier", ## default type
+  data = stanford2)
+
+km.model
+```
+
+```{r}
+## base R plot
+# plot(km.model, 
+#      xlab ="Time (months)", 
+#      ylab = "% Alive = S(t)", 
+#      main = "KM-Model", 
+#      las = 1, ## rotate y-axis labels
+#      mark.time = TRUE ## this allows to visualise at what time were the observations censored
+#      )
+# abline(h = 0.5, col= "red")
+```
+
+```{r}
+ggsurvfit::survfit2(survival::Surv(time, status) ~ MisMatchLevel, data = stanford2) %>% 
+  ggsurvfit::ggsurvfit() +
+  labs(
+    x = "Days",
+    y = "Overall survival probability"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  labs(title = "Survival curves by 'MisMatchLevel' variable")
+```
+
+```{r}
+ggsurvfit::survfit2(survival::Surv(time, status) ~ Over40, data = stanford2) %>% 
+  ggsurvfit::ggsurvfit() +
+  labs(
+    x = "Days",
+    y = "Overall survival probability"
+  ) + 
+  add_confidence_interval() +
+  add_risktable() +
+  labs(title = "Survival curves by 'Over40' variable")
+```
+
+
+```{r}
+cox.mod <- coxph(Surv(time, status) ~ Over40 + MisMatchLevel, data = stanford2)
+summary(cox.mod)
+```
+- The model summary returns the HRs (`exp(coef)`) for the variable groups:    
+  - for example, looking at the `Over40` variable, a $HR = 1.64$ means that at a given instant in time, someone over 40 has $1.64$ times as likely to die as someone <= 40 (adjusting for the level of the `MisMatchLevel` variable)      
+  - If we subtract $HR-1$, we can interpret the result as a percentage change: in the example, $1.64-1 = 0.64$ or $64%$ --> at a given instant in time, someone > 40 is $64%$ more likely to die as someone who is <= 40 (adjusting for the level of the `MisMatchLevel` variable). Taking two individuals with the same `MisMatchLevel`, the one > 40 will be $64%$ more likely to die than the one <= 40.    
+
+- The model summary also returns the `exp(-coef)`, which is the HR obtained by flipping the groups (therefore changing the reference group, i.e. the denominator of the HR): e.g. someone who is <=40 is 0.61 as likely to die as someone who is > 40.   
+
+- At the bottom there are the tests (**Likelihood ratio test**, **Wald test** and **Score (logrank) test**) for the null hypothesis : $H0: \beta_1 = \beta_2 = ... = \beta_k = 0$ (and $H_A$: at least one coefficient is not 0). They test the **overall-model significance**. 
+
+
+
+- The **Concordance** (or **C-statistic**): this is the **goodness-of-fit statistic** for survival analysis (in logistic regression, this is equivalent to the area under the curve, AUC): it is calculated by looking at pairs of observations and checking the concordance of the model's prediction of length of survival versus the actual survival retrieved from the data. The concordance is the **proportion of pairs of observations that are concordant** (**model predictions** and **actual data**). If the model is just making random guesses, we would expect a concordance = 0.5.    
+
+## Comparing nested models using the LRT
+
+- The **likelihood ratio test** (**LRT**) can be used to **compare nested models**, if adding/removing variables improves the model, etc   
+
+- In the example, we want to understand whether we can drop from the model the `MisMatchLevel` variable
+
+```{r}
+cox.mod <- coxph(Surv(time, status) ~ Over40 + MisMatchLevel, data = stanford2)
+cox.mod2 <- coxph(Surv(time, status) ~ Over40 , data = stanford2)
+```
+
+
+Carry out the **LRT** to **compare the two models**:
+
+```{r}
+anova(cox.mod2, cox.mod, test = "LRT")
+```
+
+- The outcome highlights that there isn't a statistically significant difference between the two models, therefore we can drop `MisMatchLevel` without loss of predictive power.   
+
+
+## Including numeric variables in the CPH model
+
+```{r}
+cox.num <- coxph(Surv(time, status) ~ age + t5, data = stanford2)
+summary(cox.num)
+```
+- Interpretation of results for `Age` variable: at a given instant in time, the probabilty of dying for someone who is 1-year older is $3%$ (or $1.03$) higher than someone who is 1 year younger, adjusting for the `t5` score.    
+
+# Checking CPH model assumptions in R
+
+We will check two assumptions:   
+- How to **check linearity**  
+- How to check the **proportional hazards' assumption**  
+
+## Check linearity assumption
+
+- The assumption is that the **relationship of any of the numeric predictors** ($X$) and the $ln(HAZ)$ is **linear**.   
+- To check this assumption we can use the same technique that is used for other models (e.g. linear or Poisson regression), i.e. using **Martingale residuals**   
+
+```{r}
+plot(
+  x = predict(cox.num), 
+  y = residuals(cox.num, type = "martingale"),
+  xlab = "fitted values", 
+  ylab = "Martingale residuals",
+  main = "Residual plot (Martingale)", 
+  las = 1 # this rotates values on y-axis
+  )
+
+## add a line at y = residual = 0
+abline(h=0)
+
+## fit a smoother through the points
+lines(
+  smooth.spline( 
+    x = predict(cox.num),
+    y = residuals(cox.num, type = "martingale")),
+  col = "red"
+  )
+
+```
+
+- The fitted values are the predicted values by the model  
+- We can observe some non-linearity present from the plot   
+
+- We can also check the same kind of plot but using the **deviance residuals**
+
+
+```{r}
+plot(
+  x = predict(cox.num), 
+  y = residuals(cox.num, type = "deviance"),
+  xlab = "fitted values", 
+  ylab = "Deviance residuals",
+  main = "Residual plot (Deviance)", 
+  las = 1 # this rotates values on y-axis
+  )
+
+## add a line at y = residual = 0
+abline(h=0)
+
+## fit a smoother through the points
+lines(
+  smooth.spline( 
+    x = predict(cox.num),
+    y = residuals(cox.num, type = "deviance")),
+  col = "red"
+  )
+
+```
+
+- Again, some non-linearity is evidenced also in this plot   
+
+- The **approach to non-linearity**, we can **identify the non-linear variable** and **categorise it**, or **include polynomial terms** or **transform the variable**   
+
+
+## Checking the Proportional Hazards assumption
+
+There are various way to fo this 
+
+
+### C-log-log plot
+
+- Use a **C-log-log plot**: **log of survival** vs **log of time**. We look for **convergence**, **divergence** or **crossing** of the **hazard functions**  (it does not take into account confounding)   
+
+```{r}
+plot(
+  survfit(Surv(time, status) ~ Over40, data = stanford2) , 
+  col=c("black", "red"), 
+  xlab = "Time (in days) ",
+  ylab = "Survival", 
+  main = "Survival curves by Over40"
+  )
+
+legend(3000,0.9, legend=c("<= 40", "> 40"), lty = 1, lwd = 2, bty = "", cex = 0.8, col = c("black", "red"))
+```
+
+
+```{r}
+plot(
+  survfit(Surv(time, status) ~ Over40, data = stanford2) , 
+  col=c("black", "red"), 
+  fun="cloglog", 
+  xlab = "Time (in days) using log",
+  ylab = "log-log survival", 
+  main = "log-log curves by Over40"
+  )
+
+legend(1000,-3, legend=c("<= 40", "> 40"), lty = 1, lwd = 2, bty = "", cex = 0.8, col = c("black", "red"))
+```
+
+
+
+- The **log-log curves cross** indicate that the **hazards** of the two groups are **changing over time**, so using one HR to summarise the data is incorrect (the HR is not constant!)        
+- In this example the log-log curves cross, therefore it is not appropriate to use the CPH model for this data.     
+
+### Schoenfeld test
+- Use **Schoenfeld test** for proportional hazards (**$H_0$: the hazards are proportional**, equivalent to HR being constant over time). 
+
+```{r}
+cox.zph(cox.num)
+```
+
+- The test returns a result for each individual explanatory variable as well as a `GLOBAL` test for the overall model   
+
+- We can also look at the **plot** of the **Schoenfeld test**: if we allow the variables' coefficients ($\beta$) to change over time (equivalent to allow the $HRs$ to change over time), what changes would we see?   
+  - If **coefficients do not change over time**, we expect **no change** ($0$)   
+
+```{r}
+# we have two variables in the model, so we have 2 plots returned
+plot(cox.zph(cox.num)[1], main = "Age")
+abline(h=0, col = 2)
+```
+
+
+```{r}
+# we have two variables in the model, so we have 2 plots returned
+plot(cox.zph(cox.num)[2], main = "t5")
+abline(h=0, col = 2)
+```
+
+- The **solid black line** in the middle is looking at: if we allow the **coefficients ($\beta s$) for the variable to change over time**, how much of a change we will be seeing? A change of $0$ means n change (red line on the plots).   
+- The **dashed lines** represent the **95% confidence interval** for the **$\beta s$ change**  
+- The main thing to check is **whether the red line ($0$ change) is in the 95% confidence interval for most of the time** (in the example it looks it is ok for `t5` but not for `Age`)         
+
+
+- **Scaled Schoenfeld Residuals Chart**: **Schoenfeld residuals** are used to **test the assumption of proportional hazards**. Schoenfeld residuals "can essentially be thought of as the observed minus the expected values of the covariates at each failure time" (Steffensmeier & Jones, 2004: 121). There is a Schoenfeld residual for each subject for each covariate. The plot of Schoenfeld residuals against time for any covariate should **not show a pattern of changing residuals for that covariate**. If there is a **pattern**, that **covariate is time-dependent**. As a rule of thumb, a non-zero slope is an indication of a violation of the proportional hazard assumption. The dotted lines outline the 95% confidence interval.   
+
+- If the PHs assumption is violated there are different solutions:
+  - **Stratify** by the variable that doesn't meet the PH assumption  
+  - Use **time-dependent coefficient models** (these allow the effect of the variable to interact with time or to change over time). E.g. time-updated Cox models.
+
+
+
+
+
+
+
+
+
+
+
+

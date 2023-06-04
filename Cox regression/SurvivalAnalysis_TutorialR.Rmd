@@ -31,6 +31,10 @@ library(ggsurvfit)
 
 Tutorial from online YouTube video collection: https://www.youtube.com/watch?v=vX3l36ptrTU&list=PLqzoL9-eJTNDdnKvep_YHIwk2AMqHhuJ0&index=1
 
+For an online version of this rmarkdown file, please check: https://rpubs.com/auraf285/SurvAnalysisR
+
+For the RMarkdown file, see https://github.com/AuraFrizzati/Tutorials/tree/main/Cox%20regression
+
 # What is censoring?
 
 Survival analysis models **time-to-event** as an **outcome** (e.g. time to death, how long does one wait on a waiting list for surgery, etc).
